@@ -263,6 +263,7 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;color:var
 
 <div class="lightbox" id="lightbox"><img id="lightboxImg"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
 <script>
 // ═══════════════════════════════════════
@@ -271,14 +272,69 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;color:var
 const PIN_COLORS = ['#d4764e','#c2536a','#4a90b8','#5ba87a','#c49a3c','#9b6cb8','#d49a6e','#4ab8a0','#e85d75','#3a7ca5','#d4a03c','#6b8f3a'];
 const EMOJIS = ['💕','✨','🌊','🏮','🍜','🚗','🌅','⛰️','🎵','🍷','☕','🌸','📸','🏠','🎒','🏖️'];
 
-let pins = [
-  {id:1,type:'blog',title:"Where It All Began",location:"Paris, France",lat:48.8566,lng:2.3522,date:"March 2023",emoji:"💕",text:"We stood on Pont des Arts at golden hour, the Seine shimmering below. You said something silly about the pigeons and I knew right then this was going to be something special.\n\nWe walked for hours that evening — through the Marais, past Notre-Dame, down tiny streets that smelled like fresh bread.",images:[],tags:["love","first trip","sunset"],color:"#c2536a"},
-  {id:2,type:'album',title:"Lost in Translation",location:"Tokyo, Japan",lat:35.6762,lng:139.6503,date:"October 2023",emoji:"🏮",text:"Shibuya at midnight feels like standing inside a neon heartbeat. Best ramen of our lives.",images:["https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800","https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=800","https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?w=800"],tags:["adventure","food","city"],color:"#d4764e"},
-  {id:3,type:'blog',title:"Morning Swim",location:"Santorini, Greece",lat:36.3932,lng:25.4615,date:"July 2024",emoji:"🌊",text:"Woke up before the sun and walked down those impossible white stairs to the water. The Aegean was perfectly still, dark blue glass.\n\nBreakfast was honey and yogurt on a terrace overlooking the caldera. Some mornings are just perfect.",images:["https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800"],tags:["summer","beach","sunrise"],color:"#4a90b8"},
-  {id:4,type:'album',title:"Northern Lights",location:"Tromsø, Norway",lat:69.6496,lng:18.956,date:"December 2024",emoji:"✨",text:"We waited three freezing nights. Then the sky erupted with green ribbons. You grabbed my hand and neither of us spoke for twenty minutes.",images:["https://images.unsplash.com/photo-1483347756197-71ef80e95f73?w=800","https://images.unsplash.com/photo-1531366936337-7c912a4589a7?w=800"],tags:["wonder","winter","bucket list"],color:"#5ba87a"},
-  {id:5,type:'note',title:"Road Trip Playlist",location:"Big Sur, California",lat:36.2704,lng:-121.8081,date:"September 2023",emoji:"🚗",text:"Highway 1 with the windows down. Bixby Bridge took our breath away. California is showing off and it knows it.",images:[],tags:["road trip","nature"],color:"#d49a6e"}
-];
-let nextId = 100;
+// ═══════════════════════════════════════
+//  SUPABASE SETUP
+// ═══════════════════════════════════════
+const SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let pins = [];
+let dbReady = false;
+
+// Load all pins on startup
+async function loadPins() {
+  const { data, error } = await supabase
+    .from('pins')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.error('Supabase load error:', error);
+    // Fallback sample data if DB not ready
+    if (!dbReady) {
+      pins = [
+        {id:1,type:'blog',title:"Where It All Began",location:"Paris, France",lat:48.8566,lng:2.3522,date:"March 2023",emoji:"💕",text:"We stood on Pont des Arts at golden hour, the Seine shimmering below. You said something silly about the pigeons and I knew right then this was going to be something special.\n\nWe walked for hours that evening — through the Marais, past Notre-Dame, down tiny streets that smelled like fresh bread.",images:[],tags:["love","first trip","sunset"],color:"#c2536a"},
+        {id:2,type:'album',title:"Lost in Translation",location:"Tokyo, Japan",lat:35.6762,lng:139.6503,date:"October 2023",emoji:"🏮",text:"Shibuya at midnight feels like standing inside a neon heartbeat. Best ramen of our lives.",images:["https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800","https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=800","https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?w=800"],tags:["adventure","food","city"],color:"#d4764e"},
+        {id:3,type:'blog',title:"Morning Swim",location:"Santorini, Greece",lat:36.3932,lng:25.4615,date:"July 2024",emoji:"🌊",text:"Woke up before the sun and walked down those impossible white stairs to the water. The Aegean was perfectly still, dark blue glass.\n\nBreakfast was honey and yogurt on a terrace overlooking the caldera. Some mornings are just perfect.",images:["https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800"],tags:["summer","beach","sunrise"],color:"#4a90b8"},
+      ];
+      rebuildEntities(); updateStats();
+    }
+    return;
+  }
+
+  dbReady = true;
+  pins = data || [];
+  rebuildEntities();
+  updateStats();
+}
+
+// Real-time subscription — syncs across all devices instantly
+supabase
+  .channel('pins-realtime')
+  .on('postgres_changes', { event: '*', schema: 'public', table: 'pins' }, () => {
+    loadPins(); // Reload all pins on any change
+  })
+  .subscribe();
+
+// Initial load
+loadPins();
+
+// Supabase CRUD helpers
+async function savePin(data) {
+  const { error } = await supabase.from('pins').insert([data]);
+  if (error) throw error;
+}
+
+async function updatePin(pinId, data) {
+  const { error } = await supabase.from('pins').update(data).eq('id', pinId);
+  if (error) throw error;
+}
+
+async function deletePin(pinId) {
+  const { error } = await supabase.from('pins').delete().eq('id', pinId);
+  if (error) throw error;
+}
 
 // ═══════════════════════════════════════
 //  CESIUM SETUP
@@ -500,10 +556,21 @@ function openDetail(pin) {
     closeDetail();
     setTimeout(() => openModal(pin.type, {lat:pin.lat,lng:pin.lng}, pin), 350);
   };
-  document.getElementById('btnDel').onclick = () => {
+  document.getElementById('btnDel').onclick = async () => {
     if (confirm('Delete this memory?')) {
-      pins = pins.filter(p => p.id !== pin.id);
-      rebuildEntities(); updateStats(); closeDetail();
+      try {
+        if (pin.id && dbReady) {
+          await deletePin(pin.id);
+        } else {
+          pins = pins.filter(p => p.id !== pin.id);
+          rebuildEntities(); updateStats();
+        }
+      } catch(e) {
+        console.error('Delete error:', e);
+        pins = pins.filter(p => p.id !== pin.id);
+        rebuildEntities(); updateStats();
+      }
+      closeDetail();
     }
   };
   overlay.classList.add('active');
@@ -597,7 +664,7 @@ function openModal(type, coords, editPin=null) {
   }
 
   document.getElementById('modalCancel').onclick = () => modalOverlay.classList.remove('active');
-  document.getElementById('modalSave').onclick = () => {
+  document.getElementById('modalSave').onclick = async () => {
     const title = document.getElementById('mTitle').value.trim();
     const lat = parseFloat(document.getElementById('mLat').value);
     const lng = parseFloat(document.getElementById('mLng').value);
@@ -608,7 +675,7 @@ function openModal(type, coords, editPin=null) {
     const images = [...document.querySelectorAll('.img-url')].map(i=>i.value.trim()).filter(Boolean);
 
     const data = {
-      id: isEdit?pin.id:nextId++, type, title,
+      type, title,
       location: document.getElementById('mLocation').value.trim() || `${lat.toFixed(1)}, ${lng.toFixed(1)}`,
       lat, lng, date: document.getElementById('mDate').value||'',
       emoji: selEmoji?selEmoji.textContent:'📍',
@@ -617,10 +684,21 @@ function openModal(type, coords, editPin=null) {
       images, tags: document.getElementById('mTags').value.split(',').map(s=>s.trim()).filter(Boolean),
     };
 
-    if (isEdit) { const idx=pins.findIndex(p=>p.id===pin.id); if(idx!==-1) pins[idx]=data; }
-    else pins.push(data);
+    try {
+      if (isEdit && pin.id && dbReady) {
+        await updatePin(pin.id, data);
+      } else {
+        await savePin(data);
+      }
+    } catch(e) {
+      console.error('Save error:', e);
+      // Fallback: update local array if Supabase not connected
+      if (isEdit) { const idx=pins.findIndex(p=>p.id===pin.id); if(idx!==-1) Object.assign(pins[idx], data); }
+      else pins.push({ ...data, id: Date.now() });
+      rebuildEntities(); updateStats();
+    }
 
-    rebuildEntities(); updateStats(); modalOverlay.classList.remove('active');
+    modalOverlay.classList.remove('active');
 
     // Fly to new pin
     if (!isEdit) {
