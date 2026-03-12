@@ -272,69 +272,16 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;color:var
 const PIN_COLORS = ['#d4764e','#c2536a','#4a90b8','#5ba87a','#c49a3c','#9b6cb8','#d49a6e','#4ab8a0','#e85d75','#3a7ca5','#d4a03c','#6b8f3a'];
 const EMOJIS = ['💕','✨','🌊','🏮','🍜','🚗','🌅','⛰️','🎵','🍷','☕','🌸','📸','🏠','🎒','🏖️'];
 
-// ═══════════════════════════════════════
-//  SUPABASE SETUP
-// ═══════════════════════════════════════
-const SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
 let pins = [];
 let dbReady = false;
+let sb = null; // supabase client — set after Cesium loads
 
-// Load all pins on startup
-async function loadPins() {
-  const { data, error } = await supabase
-    .from('pins')
-    .select('*')
-    .order('created_at', { ascending: true });
-
-  if (error) {
-    console.error('Supabase load error:', error);
-    // Fallback sample data if DB not ready
-    if (!dbReady) {
-      pins = [
-        {id:1,type:'blog',title:"Where It All Began",location:"Paris, France",lat:48.8566,lng:2.3522,date:"March 2023",emoji:"💕",text:"We stood on Pont des Arts at golden hour, the Seine shimmering below. You said something silly about the pigeons and I knew right then this was going to be something special.\n\nWe walked for hours that evening — through the Marais, past Notre-Dame, down tiny streets that smelled like fresh bread.",images:[],tags:["love","first trip","sunset"],color:"#c2536a"},
-        {id:2,type:'album',title:"Lost in Translation",location:"Tokyo, Japan",lat:35.6762,lng:139.6503,date:"October 2023",emoji:"🏮",text:"Shibuya at midnight feels like standing inside a neon heartbeat. Best ramen of our lives.",images:["https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800","https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=800","https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?w=800"],tags:["adventure","food","city"],color:"#d4764e"},
-        {id:3,type:'blog',title:"Morning Swim",location:"Santorini, Greece",lat:36.3932,lng:25.4615,date:"July 2024",emoji:"🌊",text:"Woke up before the sun and walked down those impossible white stairs to the water. The Aegean was perfectly still, dark blue glass.\n\nBreakfast was honey and yogurt on a terrace overlooking the caldera. Some mornings are just perfect.",images:["https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800"],tags:["summer","beach","sunrise"],color:"#4a90b8"},
-      ];
-      rebuildEntities(); updateStats();
-    }
-    return;
-  }
-
-  dbReady = true;
-  pins = data || [];
-  rebuildEntities();
-  updateStats();
-}
-
-// Real-time subscription — syncs across all devices instantly
-supabase
-  .channel('pins-realtime')
-  .on('postgres_changes', { event: '*', schema: 'public', table: 'pins' }, () => {
-    loadPins(); // Reload all pins on any change
-  })
-  .subscribe();
-
-// Initial load
-loadPins();
-
-// Supabase CRUD helpers
-async function savePin(data) {
-  const { error } = await supabase.from('pins').insert([data]);
-  if (error) throw error;
-}
-
-async function updatePin(pinId, data) {
-  const { error } = await supabase.from('pins').update(data).eq('id', pinId);
-  if (error) throw error;
-}
-
-async function deletePin(pinId) {
-  const { error } = await supabase.from('pins').delete().eq('id', pinId);
-  if (error) throw error;
-}
+// Sample data fallback
+const SAMPLE_PINS = [
+  {id:1,type:'blog',title:"Where It All Began",location:"Paris, France",lat:48.8566,lng:2.3522,date:"March 2023",emoji:"💕",text:"We stood on Pont des Arts at golden hour, the Seine shimmering below. You said something silly about the pigeons and I knew right then this was going to be something special.\n\nWe walked for hours that evening — through the Marais, past Notre-Dame, down tiny streets that smelled like fresh bread.",images:[],tags:["love","first trip","sunset"],color:"#c2536a"},
+  {id:2,type:'album',title:"Lost in Translation",location:"Tokyo, Japan",lat:35.6762,lng:139.6503,date:"October 2023",emoji:"🏮",text:"Shibuya at midnight feels like standing inside a neon heartbeat. Best ramen of our lives.",images:["https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800","https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?w=800","https://images.unsplash.com/photo-1551641506-ee5bf4cb45f1?w=800"],tags:["adventure","food","city"],color:"#d4764e"},
+  {id:3,type:'blog',title:"Morning Swim",location:"Santorini, Greece",lat:36.3932,lng:25.4615,date:"July 2024",emoji:"🌊",text:"Woke up before the sun and walked down those impossible white stairs to the water. The Aegean was perfectly still, dark blue glass.\n\nBreakfast was honey and yogurt on a terrace overlooking the caldera. Some mornings are just perfect.",images:["https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?w=800"],tags:["summer","beach","sunrise"],color:"#4a90b8"},
+];
 
 // ═══════════════════════════════════════
 //  CESIUM SETUP
@@ -451,7 +398,10 @@ function rebuildEntities() {
     });
   });
 }
+// Show sample pins immediately while Supabase loads
+pins = SAMPLE_PINS;
 rebuildEntities();
+updateStats();
 
 // ═══════════════════════════════════════
 //  CLICK HANDLING — open detail on left click
@@ -718,7 +668,68 @@ function updateStats() {
   document.getElementById('pinCount').textContent = pins.length;
   document.getElementById('placeCount').textContent = new Set(pins.map(p=>p.location)).size;
 }
-updateStats();
+
+// ═══════════════════════════════════════
+//  SUPABASE SETUP — runs after Cesium is fully ready
+// ═══════════════════════════════════════
+async function loadPins() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb
+      .from('pins')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    dbReady = true;
+    pins = data || [];
+  } catch(e) {
+    console.warn('Supabase load error:', e);
+    if (!dbReady) pins = SAMPLE_PINS;
+  }
+  rebuildEntities();
+  updateStats();
+}
+
+async function savePin(data) {
+  if (!sb) throw new Error('DB not connected');
+  const { error } = await sb.from('pins').insert([data]);
+  if (error) throw error;
+}
+
+async function updatePin(pinId, data) {
+  if (!sb) throw new Error('DB not connected');
+  const { error } = await sb.from('pins').update(data).eq('id', pinId);
+  if (error) throw error;
+}
+
+async function deletePin(pinId) {
+  if (!sb) throw new Error('DB not connected');
+  const { error } = await sb.from('pins').delete().eq('id', pinId);
+  if (error) throw error;
+}
+
+// Initialize Supabase — wrapped in try/catch so globe always shows
+try {
+  const SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // Real-time subscription — syncs across all devices
+  sb.channel('pins-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'pins' }, () => {
+      loadPins();
+    })
+    .subscribe();
+
+  // Load pins from DB
+  loadPins();
+} catch(e) {
+  console.warn('Supabase init failed, using sample data:', e);
+  pins = SAMPLE_PINS;
+  rebuildEntities();
+  updateStats();
+}
 </script>
 </body>
 </html>
