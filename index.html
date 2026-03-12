@@ -263,7 +263,6 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;color:var
 
 <div class="lightbox" id="lightbox"><img id="lightboxImg"></div>
 
-<script src="https://unpkg.com/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
 <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
 <script>
 // ═══════════════════════════════════════
@@ -708,30 +707,39 @@ async function deletePin(pinId) {
   if (error) throw error;
 }
 
-// Initialize Supabase — wrapped in try/catch so globe always shows
-try {
-  const SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
-  const SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
-  const _supa = window.supabase;
-  const _createClient = _supa.createClient || _supa.default?.createClient;
-  if (!_createClient) throw new Error('Supabase CDN not loaded');
-  sb = _createClient(SUPABASE_URL, SUPABASE_KEY);
+// Initialize stats with sample data
+updateStats();
 
-  // Real-time subscription — syncs across all devices
-  sb.channel('pins-realtime')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'pins' }, () => {
+// ═══════════════════════════════════════
+//  SUPABASE — loaded async so it never blocks the globe
+// ═══════════════════════════════════════
+(function loadSupabase() {
+  var script = document.createElement('script');
+  script.src = 'https://unpkg.com/@supabase/supabase-js@2.49.1/dist/umd/supabase.js';
+  script.onload = function() {
+    try {
+      var SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
+      var SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // Real-time subscription
+      sb.channel('pins-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pins' }, function() {
+          loadPins();
+        })
+        .subscribe();
+
+      // Load pins from DB
       loadPins();
-    })
-    .subscribe();
-
-  // Load pins from DB
-  loadPins();
-} catch(e) {
-  console.warn('Supabase init failed, using sample data:', e);
-  pins = SAMPLE_PINS;
-  rebuildEntities();
-  updateStats();
-}
+    } catch(e) {
+      console.warn('Supabase init failed:', e);
+    }
+  };
+  script.onerror = function() {
+    console.warn('Supabase CDN failed to load, using sample data');
+  };
+  document.head.appendChild(script);
+})();
 </script>
 </body>
 </html>
