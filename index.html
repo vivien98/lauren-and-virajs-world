@@ -263,7 +263,7 @@ html,body{height:100%;overflow:hidden;font-family:'DM Sans',sans-serif;color:var
 
 <div class="lightbox" id="lightbox"><img id="lightboxImg"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2.49.1/dist/umd/supabase.js"></script>
 <script src="https://cesium.com/downloads/cesiumjs/releases/1.95/Build/Cesium/Cesium.js"></script>
 <script>
 // ═══════════════════════════════════════
@@ -401,7 +401,6 @@ function rebuildEntities() {
 // Show sample pins immediately while Supabase loads
 pins = SAMPLE_PINS;
 rebuildEntities();
-updateStats();
 
 // ═══════════════════════════════════════
 //  CLICK HANDLING — open detail on left click
@@ -713,7 +712,10 @@ async function deletePin(pinId) {
 try {
   const SUPABASE_URL = 'https://vhhlrdflkpjwcfyrukmo.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_jfPTwc6fPTtwsi3l90qxxw_HQbg5KE0';
-  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const _supa = window.supabase;
+  const _createClient = _supa.createClient || _supa.default?.createClient;
+  if (!_createClient) throw new Error('Supabase CDN not loaded');
+  sb = _createClient(SUPABASE_URL, SUPABASE_KEY);
 
   // Real-time subscription — syncs across all devices
   sb.channel('pins-realtime')
